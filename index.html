@@ -24,11 +24,22 @@
       :root {
         --app-radius: 24px;
         --primary-gradient: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
-        --bg-gradient: linear-gradient(135deg, #eef4ff 0%, #f4f7fc 50%, #eefbf5 100%);
+        --bg-gradient: linear-gradient(
+          135deg,
+          #eef4ff 0%,
+          #f4f7fc 50%,
+          #eefbf5 100%
+        );
       }
 
       body {
-        font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family:
+          "Plus Jakarta Sans",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
         min-height: 100vh;
         background: var(--bg-gradient);
         color: #2b3674;
@@ -350,12 +361,6 @@
               Kosongkan chat setiap kali mulai merekam
             </label>
           </div>
-
-          <div class="alert alert-light border small mt-3 mb-0">
-            <i class="fa-solid fa-circle-info text-primary me-1"></i>
-            Klik kata hijau untuk melihat penjelasannya. Data kamus berasal dari
-            referensi pengguna dan tidak diklaim sebagai edisi resmi KBBI 2026.
-          </div>
         </div>
       </div>
     </main>
@@ -399,7 +404,8 @@
 
         const definitionModal = new bootstrap.Modal(
           document.getElementById("definitionModal"),
-        );        let recognition = null;
+        );
+        let recognition = null;
         let dictionary = {};
         let isRecording = false;
         let manualStop = false;
@@ -536,7 +542,10 @@
 
           $("#emptyState, #interimRow").remove();
 
-          const words = cleanText.split(/\s+/).map(normalizeWord).filter(Boolean);
+          const words = cleanText
+            .split(/\s+/)
+            .map(normalizeWord)
+            .filter(Boolean);
 
           if (!words.length) return;
 
