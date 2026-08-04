@@ -190,7 +190,6 @@ File `dictionary.json` menyimpan metadata dan peta kata beserta daftar definisin
 ### Statistik Database
 - **Total Entri**: **115.664**
 - **Kata Unik**: **70.934**
-- **Sumber Data**: `dictionary__MySQL.sql` (dikompilasi menjadi format JSON).
 
 ---
 
