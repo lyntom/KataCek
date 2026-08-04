@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d6efd" />
+    <title>KataCek — Pengenalan Suara dan Kamus Indonesia</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --app-radius: 22px;
+      }
+
+      body {
+        min-height: 100vh;
+        background: linear-gradient(
+          135deg,
+          #eef4ff 0%,
+          #f8fafc 50%,
+          #eefbf5 100%
+        );
+      }
+
+      .app-card {
+        max-width: 980px;
+        border: 0;
+        border-radius: var(--app-radius);
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(35, 55, 90, 0.13);
+      }
+
+      .app-header {
+        color: #fff;
+        background: linear-gradient(135deg, #0d6efd, #084298);
+      }
+
+      .chat-area {
+        height: 450px;
+        overflow-y: auto;
+        padding: 18px;
+        border-radius: 18px;
+        background: #f5f7fb;
+        scroll-behavior: smooth;
+      }
+
+      .chat-bubble {
+        max-width: 92%;
+        margin-left: auto;
+        padding: 14px 16px;
+        line-height: 2.2;
+        background: #fff;
+        border-radius: 18px 18px 4px 18px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      }
+
+      .word {
+        display: inline-block;
+        margin: 3px 2px;
+        padding: 2px 9px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+
+      .word:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      .word-valid {
+        color: #146c43;
+        background: #d1e7dd;
+        border-color: #a3cfbb;
+      }
+
+      .word-invalid {
+        color: #b02a37;
+        background: #f8d7da;
+        border-color: #f1aeb5;
+      }
+
+      .interim-text {
+        margin-top: 8px;
+        color: #6c757d;
+        font-style: italic;
+      }
+
+      .recording-dot {
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #dc3545;
+        animation: pulse 1.2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+        }
+      }
+
+      .empty-state {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        color: #7f8996;
+        text-align: center;
+      }
+
+      .definition-item {
+        white-space: pre-line;
+        line-height: 1.7;
+      }
+
+      .stat-box {
+        min-width: 110px;
+        border-radius: 14px;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container py-4 py-lg-5">
+      <div class="card app-card mx-auto">
+        <header class="app-header p-4 p-md-5">
+          <div class="d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-white bg-opacity-25 p-3">
+              <i class="fa-solid fa-microphone-lines fa-2x"></i>
+            </div>
+            <div>
+              <h1 class="h3 mb-1">KataCek</h1>
+              <p class="mb-0 opacity-75">
+                Ubah suara menjadi teks dan periksa setiap kata dalam kamus
+                Indonesia.
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <div class="card-body p-3 p-md-4">
+          <div id="loadingAlert" class="alert alert-info">
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            Memuat database kamus...
+          </div>
+
+          <div id="browserWarning" class="alert alert-warning d-none">
+            Browser belum mendukung <strong>SpeechRecognition</strong>. Gunakan
+            Google Chrome atau Microsoft Edge terbaru.
+          </div>
+
+          <div
+            class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"
+          >
+            <div
+              id="statusBadge"
+              class="badge rounded-pill text-bg-secondary px-3 py-2"
+            >
+              <i class="fa-solid fa-circle-stop me-1"></i> Belum merekam
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+              <div class="stat-box border px-3 py-2 small text-center">
+                <div class="text-secondary">Kamus</div>
+                <strong id="dictionaryCount">0</strong>
+              </div>
+              <div class="stat-box border px-3 py-2 small text-center">
+                <div class="text-secondary">Ditemukan</div>
+                <strong id="validCount" class="text-success">0</strong>
+              </div>
+              <div class="stat-box border px-3 py-2 small text-center">
+                <div class="text-secondary">Tidak ditemukan</div>
+                <strong id="invalidCount" class="text-danger">0</strong>
+              </div>
+            </div>
+          </div>
+
+          <section id="chatArea" class="chat-area mb-3" aria-live="polite">
+            <div id="emptyState" class="empty-state">
+              <div>
+                <i class="fa-solid fa-comments fa-3x mb-3"></i>
+                <div>Tekan <strong>Mulai Merekam</strong>, lalu berbicara.</div>
+              </div>
+            </div>
+          </section>
+
+          <div class="d-grid d-sm-flex gap-2">
+            <button
+              id="startBtn"
+              type="button"
+              class="btn btn-primary btn-lg flex-fill"
+              disabled
+            >
+              <i class="fa-solid fa-microphone me-2"></i>Mulai Merekam
+            </button>
+
+            <button
+              id="stopBtn"
+              type="button"
+              class="btn btn-danger btn-lg flex-fill"
+              disabled
+            >
+              <i class="fa-solid fa-stop me-2"></i>Stop
+            </button>
+
+            <button
+              id="clearBtn"
+              type="button"
+              class="btn btn-outline-secondary btn-lg"
+              title="Kosongkan chat"
+            >
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+
+          <div class="form-check form-switch mt-3">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="resetOnStart"
+              checked
+            />
+            <label class="form-check-label" for="resetOnStart">
+              Kosongkan chat setiap kali mulai merekam
+            </label>
+          </div>
+
+          <div class="alert alert-light border small mt-3 mb-0">
+            <i class="fa-solid fa-circle-info text-primary me-1"></i>
+            Klik kata hijau untuk melihat penjelasannya. Data kamus berasal dari
+            referensi pengguna dan tidak diklaim sebagai edisi resmi KBBI 2026.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div
+      class="modal fade"
+      id="definitionModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div
+        class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable"
+      >
+        <div class="modal-content border-0 shadow">
+          <div class="modal-header">
+            <div>
+              <div class="small text-secondary">Kata</div>
+              <h2 id="modalWord" class="modal-title h4 mb-0"></h2>
+            </div>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Tutup"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="modalDefinitions"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+      $(function () {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        const definitionModal = new bootstrap.Modal(
+          document.getElementById("definitionModal"),
+        );
+
+        let recognition = null;
+        let dictionary = {};
+        let isRecording = false;
+        let manualStop = false;
+
+        $.getJSON("dictionary.json")
+          .done(function (data) {
+            dictionary = data.kata || {};
+
+            $("#dictionaryCount").text(
+              Object.keys(dictionary).length.toLocaleString("id-ID"),
+            );
+
+            $("#loadingAlert")
+              .removeClass("alert-info")
+              .addClass("alert-success")
+              .html(
+                '<i class="fa-solid fa-circle-check me-2"></i>' +
+                  "Database kamus berhasil dimuat.",
+              );
+
+            $("#startBtn").prop("disabled", !SpeechRecognition);
+
+            setTimeout(function () {
+              $("#loadingAlert").slideUp();
+            }, 1500);
+          })
+          .fail(function () {
+            $("#loadingAlert")
+              .removeClass("alert-info")
+              .addClass("alert-danger")
+              .html(
+                '<i class="fa-solid fa-triangle-exclamation me-2"></i>' +
+                  "dictionary.json gagal dimuat. Jalankan aplikasi melalui web server lokal.",
+              );
+          });
+
+        if (!SpeechRecognition) {
+          $("#browserWarning").removeClass("d-none");
+        }
+
+        function normalizeWord(value) {
+          return String(value || "")
+            .toLocaleLowerCase("id-ID")
+            .replace(/[^a-zà-ÿ'-]/gi, "")
+            .replace(/^[-']+|[-']+$/g, "");
+        }
+
+        function createRecognition() {
+          recognition = new SpeechRecognition();
+          recognition.lang = "id-ID";
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+
+          recognition.onstart = function () {
+            isRecording = true;
+
+            $("#statusBadge")
+              .removeClass("text-bg-secondary")
+              .addClass("text-bg-danger")
+              .html('<span class="recording-dot me-2"></span>Sedang merekam');
+
+            $("#startBtn").prop("disabled", true);
+            $("#stopBtn").prop("disabled", false);
+          };
+
+          recognition.onresult = function (event) {
+            let interimText = "";
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcript = event.results[i][0].transcript.trim();
+
+              if (event.results[i].isFinal) {
+                if (transcript) {
+                  addMessage(transcript);
+                }
+              } else {
+                interimText += transcript + " ";
+              }
+            }
+
+            showInterim(interimText.trim());
+          };
+
+          recognition.onerror = function (event) {
+            const messages = {
+              "not-allowed": "Izin mikrofon ditolak.",
+              "audio-capture": "Mikrofon tidak ditemukan.",
+              network:
+                "Terjadi gangguan jaringan pada layanan pengenalan suara.",
+              "no-speech": "Tidak ada suara yang terdeteksi.",
+              aborted: "Perekaman dihentikan.",
+            };
+
+            if (!["aborted", "no-speech"].includes(event.error)) {
+              showError(messages[event.error] || "Kesalahan: " + event.error);
+            }
+          };
+
+          recognition.onend = function () {
+            if (isRecording && !manualStop) {
+              try {
+                recognition.start();
+              } catch (error) {
+                console.debug(error);
+              }
+              return;
+            }
+
+            setStoppedState();
+          };
+        }
+
+        function addMessage(text) {
+          $("#emptyState, #interimText").remove();
+
+          const words = text.split(/\s+/).map(normalizeWord).filter(Boolean);
+
+          if (!words.length) return;
+
+          const $bubble = $('<div class="chat-bubble mb-3"></div>');
+
+          words.forEach(function (word) {
+            const definitions = dictionary[word];
+            const isValid =
+              Array.isArray(definitions) && definitions.length > 0;
+
+            const $word = $("<button>", {
+              type: "button",
+              class: "word " + (isValid ? "word-valid" : "word-invalid"),
+              text: word,
+              title: isValid
+                ? "Klik untuk melihat penjelasan"
+                : "Kata tidak ditemukan",
+            })
+              .data("word", word)
+              .data("definitions", definitions || []);
+
+            $bubble.append($word).append(" ");
+          });
+
+          $("#chatArea").append($bubble);
+          updateStats();
+          scrollBottom();
+        }
+
+        $(document).on("click", ".word", function () {
+          const word = $(this).data("word");
+          const definitions = $(this).data("definitions") || [];
+
+          $("#modalWord").text(word);
+
+          const $container = $("#modalDefinitions").empty();
+
+          if (!definitions.length) {
+            $container.html(
+              '<div class="alert alert-danger mb-0">' +
+                "Kata tidak ditemukan dalam database." +
+                "</div>",
+            );
+          } else {
+            definitions.forEach(function (definition, index) {
+              const $item = $(
+                '<div class="definition-item border rounded-3 p-3 mb-2"></div>',
+              );
+
+              $item
+                .append($("<strong>").text(index + 1 + ". "))
+                .append(document.createTextNode(definition));
+
+              $container.append($item);
+            });
+          }
+
+          definitionModal.show();
+        });
+
+        function showInterim(text) {
+          $("#interimText").remove();
+
+          if (!text) return;
+
+          $("#emptyState").remove();
+
+          $("<div>", {
+            id: "interimText",
+            class: "interim-text",
+            text: text + "…",
+          }).appendTo("#chatArea");
+
+          scrollBottom();
+        }
+
+        function clearChat() {
+          $("#chatArea").html(`
+          <div id="emptyState" class="empty-state">
+            <div>
+              <i class="fa-solid fa-comments fa-3x mb-3"></i>
+              <div>Mulai berbicara setelah mikrofon aktif.</div>
+            </div>
+          </div>
+        `);
+
+          updateStats();
+        }
+
+        function updateStats() {
+          $("#validCount").text($(".word-valid").length);
+          $("#invalidCount").text($(".word-invalid").length);
+        }
+
+        function scrollBottom() {
+          const area = $("#chatArea")[0];
+          area.scrollTop = area.scrollHeight;
+        }
+
+        function showError(message) {
+          $("#chatArea").prepend(
+            $('<div class="alert alert-danger py-2"></div>').text(message),
+          );
+        }
+
+        function setStoppedState() {
+          isRecording = false;
+
+          $("#statusBadge")
+            .removeClass("text-bg-danger")
+            .addClass("text-bg-secondary")
+            .html(
+              '<i class="fa-solid fa-circle-stop me-1"></i> Perekaman berhenti',
+            );
+
+          $("#startBtn").prop("disabled", false);
+          $("#stopBtn").prop("disabled", true);
+
+          showInterim("");
+        }
+
+        $("#startBtn").on("click", function () {
+          if ($("#resetOnStart").is(":checked")) {
+            clearChat();
+          }
+
+          manualStop = false;
+
+          if (!recognition) {
+            createRecognition();
+          }
+
+          try {
+            recognition.start();
+          } catch (error) {
+            console.debug(error);
+          }
+        });
+
+        $("#stopBtn").on("click", function () {
+          manualStop = true;
+          isRecording = false;
+
+          if (recognition) {
+            recognition.stop();
+          }
+
+          setStoppedState();
+        });
+
+        $("#clearBtn").on("click", clearChat);
+
+        if (SpeechRecognition) {
+          createRecognition();
+        }
+      });
+    </script>
+  </body>
+</html>
