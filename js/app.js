@@ -54,8 +54,6 @@ $(function () {
   let lastProcessedIndex = -1;
   let restartTimer = null;
   let interimCommitTimer = null;
-  let lastCommittedText = "";
-  let lastCommittedTime = 0;
 
   // Load Dictionary JSON Database
   $.getJSON("dictionary.json")
@@ -178,6 +176,7 @@ $(function () {
 
     recognition.onresult = function (event) {
       let interimText = "";
+      let maxInterimIndex = -1;
       let hasFinalInThisEvent = false;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -189,11 +188,12 @@ $(function () {
           if (i > lastProcessedIndex) {
             lastProcessedIndex = i;
             if (transcript) {
-              commitMessage(transcript);
+              addMessage(transcript);
             }
           }
         } else {
           interimText += transcript + " ";
+          maxInterimIndex = Math.max(maxInterimIndex, i);
         }
       }
 
@@ -202,13 +202,19 @@ $(function () {
 
       clearTimeout(interimCommitTimer);
       if (currentInterim && !hasFinalInThisEvent) {
-        // Fast Commit: convert interim speech to chat after 600ms of silence
+        // Fast Commit after 500ms of silence
         interimCommitTimer = setTimeout(function () {
           if (currentInterim) {
-            commitMessage(currentInterim);
+            if (maxInterimIndex >= 0) {
+              lastProcessedIndex = Math.max(
+                lastProcessedIndex,
+                maxInterimIndex,
+              );
+            }
+            addMessage(currentInterim);
             showInterim("");
           }
-        }, 600);
+        }, 500);
       }
     };
 
@@ -261,27 +267,6 @@ $(function () {
   /* ------------------------------------------------------------------------
    * 5. UI Renderers & Event Handlers
    * ------------------------------------------------------------------------ */
-  function commitMessage(text) {
-    const cleanText = String(text || "").trim();
-    if (!cleanText) return;
-
-    const normalizedText = cleanText.toLowerCase();
-    const now = Date.now();
-
-    // Prevent duplicate commits of identical text within 2.5 seconds
-    if (
-      normalizedText === lastCommittedText &&
-      now - lastCommittedTime < 2500
-    ) {
-      return;
-    }
-
-    lastCommittedText = normalizedText;
-    lastCommittedTime = now;
-
-    addMessage(cleanText);
-  }
-
   function addMessage(text) {
     const cleanText = String(text || "").trim();
 
@@ -323,7 +308,7 @@ $(function () {
         class: "word " + (isValid ? "word-valid" : "word-invalid"),
         text: word,
         title: isValid
-          ? "Klik untuk melihat penjelasan"
+          ? "Klik meilhat penjelasan"
           : "Kata tidak ditemukan",
       })
         .data("word", word)
@@ -450,8 +435,8 @@ $(function () {
     clearTimeout(interimCommitTimer);
 
     $("#statusBadge")
-      .removeClass("text-bg-danger")
-      .addClass("text-bg-secondary")
+      .removeClass("text-bg-secondary")
+      .addClass("text-bg-danger")
       .html('<i class="fa-solid fa-circle-stop me-1"></i> Perekaman berhenti');
 
     $("#startBtn").prop("disabled", false);
