@@ -202,7 +202,7 @@ $(function () {
 
       clearTimeout(interimCommitTimer);
       if (currentInterim && !hasFinalInThisEvent) {
-        // Fast Commit after 500ms of silence
+        // Fast Commit after 350ms of natural speech pause
         interimCommitTimer = setTimeout(function () {
           if (currentInterim) {
             if (maxInterimIndex >= 0) {
@@ -214,7 +214,7 @@ $(function () {
             addMessage(currentInterim);
             showInterim("");
           }
-        }, 500);
+        }, 350);
       }
     };
 
@@ -256,7 +256,7 @@ $(function () {
               }
             }
           }
-        }, 60);
+        }, 50);
         return;
       }
 
@@ -267,13 +267,7 @@ $(function () {
   /* ------------------------------------------------------------------------
    * 5. UI Renderers & Event Handlers
    * ------------------------------------------------------------------------ */
-  function addMessage(text) {
-    const cleanText = String(text || "").trim();
-
-    if (!cleanText) return;
-
-    $("#emptyState, #interimRow").remove();
-
+  function getWordBadges(cleanText) {
     const textWithWords = numberToWords(cleanText);
 
     let words = textWithWords
@@ -286,7 +280,35 @@ $(function () {
       words = cleanText.split(/\s+/).filter(Boolean);
     }
 
-    if (!words.length) return;
+    const $container = $("<div>");
+
+    words.forEach(function (word) {
+      const definitions = dictionary[word];
+      const isValid = Array.isArray(definitions) && definitions.length > 0;
+
+      const $word = $("<button>", {
+        type: "button",
+        class: "word " + (isValid ? "word-valid" : "word-invalid"),
+        text: word,
+        title: isValid
+          ? "Klik untuk melihat penjelasan"
+          : "Kata tidak ditemukan",
+      })
+        .data("word", word)
+        .data("definitions", definitions || []);
+
+      $container.append($word).append(" ");
+    });
+
+    return $container.contents();
+  }
+
+  function addMessage(text) {
+    const cleanText = String(text || "").trim();
+
+    if (!cleanText) return;
+
+    $("#emptyState, #interimRow").remove();
 
     const timeString = new Date().toLocaleTimeString("id-ID", {
       hour: "2-digit",
@@ -299,23 +321,7 @@ $(function () {
     const $bubble = $('<div class="chat-bubble"></div>');
     const $content = $('<div class="chat-bubble-content"></div>');
 
-    words.forEach(function (word) {
-      const definitions = dictionary[word];
-      const isValid = Array.isArray(definitions) && definitions.length > 0;
-
-      const $word = $("<button>", {
-        type: "button",
-        class: "word " + (isValid ? "word-valid" : "word-invalid"),
-        text: word,
-        title: isValid
-          ? "Klik meilhat penjelasan"
-          : "Kata tidak ditemukan",
-      })
-        .data("word", word)
-        .data("definitions", definitions || []);
-
-      $content.append($word).append(" ");
-    });
+    $content.append(getWordBadges(cleanText));
 
     const $time = $(
       `<div class="chat-time"><i class="fa-regular fa-clock"></i> ${timeString}</div>`,
@@ -375,14 +381,15 @@ $(function () {
     const $interimRow = $(`
       <div id="interimRow" class="chat-row mb-3 d-flex align-items-end justify-content-end gap-2">
         <div class="chat-bubble interim-bubble">
-          <div class="interim-content d-flex align-items-center gap-2">
-            <span class="spinner-grow spinner-grow-sm text-primary" role="status"></span>
-            <span>${text}…</span>
+          <div class="chat-bubble-content interim-content d-flex align-items-center flex-wrap gap-1">
+            <span class="spinner-grow spinner-grow-sm text-primary me-1" role="status"></span>
           </div>
         </div>
         <div class="chat-avatar interim-avatar" title="Merekam Suara..."><i class="fa-solid fa-microphone-lines"></i></div>
       </div>
     `);
+
+    $interimRow.find(".interim-content").append(getWordBadges(text));
 
     $("#chatArea").append($interimRow);
     scrollBottom();
@@ -435,8 +442,8 @@ $(function () {
     clearTimeout(interimCommitTimer);
 
     $("#statusBadge")
-      .removeClass("text-bg-secondary")
-      .addClass("text-bg-danger")
+      .removeClass("text-bg-danger")
+      .addClass("text-bg-secondary")
       .html('<i class="fa-solid fa-circle-stop me-1"></i> Perekaman berhenti');
 
     $("#startBtn").prop("disabled", false);
