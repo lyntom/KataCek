@@ -667,7 +667,7 @@
         });
 
         /* ------------------------------------------------------------------------
-         * 3. Original Stable Speech Recognition Engine
+         * 3. Robust High-Performance Speech Recognition Engine
          * ------------------------------------------------------------------------ */
         const SpeechRecognition =
           window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -680,8 +680,8 @@
         let isRecording = false;
         let manualStop = false;
         let lastProcessedIndex = -1;
-        let lastFinalText = "";
-        let lastFinalTime = 0;
+        let restartTimer = null;
+        let interimCommitTimer = null;
 
         $.getJSON("dictionary.json")
           .done(function (data) {
@@ -784,6 +784,12 @@
         }
 
         function createRecognition() {
+          if (recognition) {
+            try {
+              recognition.abort();
+            } catch (e) {}
+          }
+
           recognition = new SpeechRecognition();
           recognition.lang = "id-ID";
           recognition.continuous = true;
@@ -805,6 +811,7 @@
 
           recognition.onresult = function (event) {
             let interimText = "";
+            let maxIndex = -1;
 
             for (let i = event.resultIndex; i < event.results.length; i++) {
               const result = event.results[i];
@@ -819,10 +826,26 @@
                 }
               } else {
                 interimText += transcript + " ";
+                maxIndex = Math.max(maxIndex, i);
               }
             }
 
-            showInterim(interimText.trim());
+            const currentInterim = interimText.trim();
+            showInterim(currentInterim);
+
+            clearTimeout(interimCommitTimer);
+            if (currentInterim) {
+              // Ultra-fast 450ms commit on speech pause
+              interimCommitTimer = setTimeout(function () {
+                if (currentInterim && isRecording) {
+                  if (maxIndex >= 0 && maxIndex > lastProcessedIndex) {
+                    lastProcessedIndex = maxIndex;
+                    addMessage(currentInterim);
+                    showInterim("");
+                  }
+                }
+              }, 450);
+            }
           };
 
           recognition.onerror = function (event) {
@@ -847,12 +870,22 @@
           };
 
           recognition.onend = function () {
+            clearTimeout(interimCommitTimer);
+
             if (isRecording && !manualStop) {
-              try {
-                recognition.start();
-              } catch (error) {
-                console.debug(error);
-              }
+              lastProcessedIndex = -1;
+              clearTimeout(restartTimer);
+              restartTimer = setTimeout(function () {
+                if (isRecording && !manualStop) {
+                  try {
+                    createRecognition();
+                    recognition.start();
+                  } catch (error) {
+                    console.warn("Auto-restart error:", error);
+                    setStoppedState();
+                  }
+                }
+              }, 80);
               return;
             }
 
@@ -861,26 +894,22 @@
         }
 
         function addMessage(text) {
-          const now = Date.now();
-          const cleanText = text.trim();
+          const cleanText = String(text || "").trim();
 
           if (!cleanText) return;
-
-          if (cleanText === lastFinalText && now - lastFinalTime < 2000) {
-            return;
-          }
-
-          lastFinalText = cleanText;
-          lastFinalTime = now;
 
           $("#emptyState, #interimRow").remove();
 
           const textWithWords = numberToWords(cleanText);
 
-          const words = textWithWords
+          let words = textWithWords
             .split(/\s+/)
             .map(normalizeWord)
             .filter(Boolean);
+
+          if (!words.length) {
+            words = cleanText.split(/\s+/).filter(Boolean);
+          }
 
           if (!words.length) return;
 
@@ -986,9 +1015,8 @@
         }
 
         function clearChat() {
-          lastFinalText = "";
-          lastFinalTime = 0;
           lastProcessedIndex = -1;
+          clearTimeout(interimCommitTimer);
 
           $("#chatArea").html(`
             <div id="emptyState" class="empty-state">
@@ -1017,6 +1045,8 @@
 
         function setStoppedState() {
           isRecording = false;
+          clearTimeout(restartTimer);
+          clearTimeout(interimCommitTimer);
 
           $("#statusBadge")
             .removeClass("text-bg-danger")
@@ -1037,21 +1067,26 @@
           }
 
           manualStop = false;
-
-          if (!recognition) {
-            createRecognition();
-          }
+          lastProcessedIndex = -1;
 
           try {
+            createRecognition();
             recognition.start();
           } catch (error) {
-            console.debug(error);
+            showAlert(
+              "error",
+              "Gagal Memulai",
+              "Gagal memulai mikrofon. Pastikan mikrofon aktif dan izin telah diberikan.",
+            );
+            setStoppedState();
           }
         });
 
         $("#stopBtn").on("click", function () {
           manualStop = true;
           isRecording = false;
+          clearTimeout(restartTimer);
+          clearTimeout(interimCommitTimer);
 
           if (recognition) {
             try {
