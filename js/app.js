@@ -52,8 +52,7 @@ $(function () {
   let isRecording = false;
   let manualStop = false;
   let lastProcessedIndex = -1;
-  let lastFinalText = "";
-  let lastFinalTime = 0;
+  let restartTimer = null;
 
   // Load Dictionary JSON Database
   $.getJSON("dictionary.json")
@@ -86,6 +85,7 @@ $(function () {
           '<i class="fa-solid fa-triangle-exclamation me-2"></i>' +
             "dictionary.json gagal dimuat. Jalankan aplikasi melalui web server lokal.",
         );
+      $("#startBtn").prop("disabled", !SpeechRecognition);
     });
 
   if (!SpeechRecognition) {
@@ -148,6 +148,12 @@ $(function () {
    * 4. Speech Recognition Engine
    * ------------------------------------------------------------------------ */
   function createRecognition() {
+    if (recognition) {
+      try {
+        recognition.abort();
+      } catch (e) {}
+    }
+
     recognition = new SpeechRecognition();
     recognition.lang = "id-ID";
     recognition.continuous = true;
@@ -190,8 +196,10 @@ $(function () {
     };
 
     recognition.onerror = function (event) {
+      console.warn("SpeechRecognition error:", event.error);
       const messages = {
-        "not-allowed": "Izin mikrofon ditolak.",
+        "not-allowed":
+          "Izin mikrofon ditolak. Periksa izin mikrofon pada browser Anda.",
         "audio-capture": "Mikrofon tidak ditemukan.",
         network: "Terjadi gangguan jaringan pada layanan pengenalan suara.",
         "no-speech": "Tidak ada suara yang terdeteksi.",
@@ -199,17 +207,31 @@ $(function () {
       };
 
       if (!["aborted", "no-speech"].includes(event.error)) {
-        showError(messages[event.error] || "Kesalahan: " + event.error);
+        showError(
+          messages[event.error] || "Kesalahan mikrofon: " + event.error,
+        );
       }
     };
 
     recognition.onend = function () {
       if (isRecording && !manualStop) {
-        try {
-          recognition.start();
-        } catch (error) {
-          console.debug(error);
-        }
+        lastProcessedIndex = -1;
+        clearTimeout(restartTimer);
+        restartTimer = setTimeout(function () {
+          if (isRecording && !manualStop && recognition) {
+            try {
+              recognition.start();
+            } catch (error) {
+              console.warn("Restart error, recreating recognition:", error);
+              try {
+                createRecognition();
+                recognition.start();
+              } catch (e) {
+                setStoppedState();
+              }
+            }
+          }
+        }, 150);
         return;
       }
 
@@ -221,26 +243,23 @@ $(function () {
    * 5. UI Renderers & Event Handlers
    * ------------------------------------------------------------------------ */
   function addMessage(text) {
-    const now = Date.now();
-    const cleanText = text.trim();
+    const cleanText = String(text || "").trim();
 
     if (!cleanText) return;
-
-    if (cleanText === lastFinalText && now - lastFinalTime < 2000) {
-      return;
-    }
-
-    lastFinalText = cleanText;
-    lastFinalTime = now;
 
     $("#emptyState, #interimRow").remove();
 
     const textWithWords = numberToWords(cleanText);
 
-    const words = textWithWords
+    let words = textWithWords
       .split(/\s+/)
       .map(normalizeWord)
       .filter(Boolean);
+
+    // Fallback if normalization removed all tokens
+    if (!words.length) {
+      words = cleanText.split(/\s+/).filter(Boolean);
+    }
 
     if (!words.length) return;
 
@@ -345,8 +364,6 @@ $(function () {
   }
 
   function clearChat() {
-    lastFinalText = "";
-    lastFinalTime = 0;
     lastProcessedIndex = -1;
 
     $("#chatArea").html(`
@@ -369,17 +386,26 @@ $(function () {
 
   function scrollBottom() {
     const area = $("#chatArea")[0];
-    area.scrollTop = area.scrollHeight;
+    if (area) {
+      area.scrollTop = area.scrollHeight;
+    }
   }
 
   function showError(message) {
     $("#chatArea").prepend(
-      $('<div class="alert alert-danger py-2"></div>').text(message),
+      $(
+        '<div class="alert alert-danger alert-dismissible fade show py-2 my-2 me-2 ms-2"></div>',
+      )
+        .text(message)
+        .append(
+          '<button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>',
+        ),
     );
   }
 
   function setStoppedState() {
     isRecording = false;
+    clearTimeout(restartTimer);
 
     $("#statusBadge")
       .removeClass("text-bg-danger")
@@ -401,6 +427,7 @@ $(function () {
     }
 
     manualStop = false;
+    lastProcessedIndex = -1;
 
     if (!recognition) {
       createRecognition();
@@ -409,16 +436,28 @@ $(function () {
     try {
       recognition.start();
     } catch (error) {
-      console.debug(error);
+      console.warn("Start error, recreating recognition instance:", error);
+      createRecognition();
+      try {
+        recognition.start();
+      } catch (err) {
+        showError(
+          "Gagal memulai pengenalan suara. Pastikan mikrofon aktif & diizinkan.",
+        );
+        setStoppedState();
+      }
     }
   });
 
   $("#stopBtn").on("click", function () {
     manualStop = true;
     isRecording = false;
+    clearTimeout(restartTimer);
 
     if (recognition) {
-      recognition.stop();
+      try {
+        recognition.stop();
+      } catch (e) {}
     }
 
     setStoppedState();
