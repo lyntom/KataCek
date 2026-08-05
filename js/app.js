@@ -5,7 +5,39 @@
 
 $(function () {
   /* ------------------------------------------------------------------------
-   * 1. Theme Switcher Logic (Light & Dark Mode)
+   * 1. SweetAlert2 Helper & Theme Sync
+   * ------------------------------------------------------------------------ */
+  function getSwalTheme() {
+    const isDark =
+      document.documentElement.getAttribute("data-bs-theme") === "dark";
+    return {
+      background: isDark ? "#1e293b" : "#ffffff",
+      color: isDark ? "#f1f5f9" : "#1e293b",
+      confirmButtonColor: "#0d6efd",
+    };
+  }
+
+  function showAlert(icon, title, text) {
+    const theme = getSwalTheme();
+    if (typeof Swal !== "undefined") {
+      Swal.fire({
+        icon: icon,
+        title: title,
+        text: text,
+        background: theme.background,
+        color: theme.color,
+        confirmButtonColor: theme.confirmButtonColor,
+        customClass: {
+          popup: "rounded-4 shadow",
+        },
+      });
+    } else {
+      alert(`${title}: ${text}`);
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+   * 2. Theme Switcher Logic (Light & Dark Mode)
    * ------------------------------------------------------------------------ */
   function updateThemeUI(theme) {
     document.documentElement.setAttribute("data-bs-theme", theme);
@@ -39,7 +71,7 @@ $(function () {
   });
 
   /* ------------------------------------------------------------------------
-   * 2. Application Variables & Initialization
+   * 3. Application Variables & Initialization
    * ------------------------------------------------------------------------ */
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -79,22 +111,27 @@ $(function () {
       }, 1500);
     })
     .fail(function () {
+      const errorMsg =
+        "dictionary.json gagal dimuat. Jalankan aplikasi melalui web server lokal.";
       $("#loadingAlert")
         .removeClass("alert-info")
         .addClass("alert-danger")
-        .html(
-          '<i class="fa-solid fa-triangle-exclamation me-2"></i>' +
-            "dictionary.json gagal dimuat. Jalankan aplikasi melalui web server lokal.",
-        );
+        .html('<i class="fa-solid fa-triangle-exclamation me-2"></i>' + errorMsg);
       $("#startBtn").prop("disabled", !SpeechRecognition);
+      showAlert("error", "Gagal Memuat Kamus", errorMsg);
     });
 
   if (!SpeechRecognition) {
     $("#browserWarning").removeClass("d-none");
+    showAlert(
+      "warning",
+      "Browser Tidak Didukung",
+      "Browser Anda belum mendukung fitur SpeechRecognition. Gunakan Google Chrome atau Microsoft Edge versi terbaru.",
+    );
   }
 
   /* ------------------------------------------------------------------------
-   * 3. Text Normalization & Number Helper Functions
+   * 4. Text Normalization & Number Helper Functions
    * ------------------------------------------------------------------------ */
   function numberToWords(str) {
     const ones = [
@@ -146,7 +183,7 @@ $(function () {
   }
 
   /* ------------------------------------------------------------------------
-   * 4. Speech Recognition Engine
+   * 5. Speech Recognition Engine
    * ------------------------------------------------------------------------ */
   function createRecognition() {
     if (recognition) {
@@ -200,7 +237,7 @@ $(function () {
 
       clearTimeout(interimCommitTimer);
       if (currentInterim) {
-        // Fast Commit: convert active interim speech to permanent chat after 350ms of silence
+        // Fast Commit after 350ms of natural speech pause
         interimCommitTimer = setTimeout(function () {
           if (currentInterim) {
             if (maxInterimIndex >= 0) {
@@ -217,20 +254,19 @@ $(function () {
     };
 
     recognition.onerror = function (event) {
-      console.warn("SpeechRecognition error:", event.error);
       const messages = {
         "not-allowed":
           "Izin mikrofon ditolak. Periksa izin mikrofon pada browser Anda.",
-        "audio-capture": "Mikrofon tidak ditemukan.",
+        "audio-capture": "Mikrofon tidak ditemukan pada perangkat Anda.",
         network: "Terjadi gangguan jaringan pada layanan pengenalan suara.",
         "no-speech": "Tidak ada suara yang terdeteksi.",
         aborted: "Perekaman dihentikan.",
       };
 
       if (!["aborted", "no-speech"].includes(event.error)) {
-        showError(
-          messages[event.error] || "Kesalahan mikrofon: " + event.error,
-        );
+        const errorText =
+          messages[event.error] || "Kesalahan mikrofon: " + event.error;
+        showAlert("error", "Kesalahan Pengenalan Suara", errorText);
       }
     };
 
@@ -245,7 +281,6 @@ $(function () {
             try {
               recognition.start();
             } catch (error) {
-              console.warn("Restart error, recreating recognition:", error);
               try {
                 createRecognition();
                 recognition.start();
@@ -263,7 +298,7 @@ $(function () {
   }
 
   /* ------------------------------------------------------------------------
-   * 5. UI Renderers & Event Handlers
+   * 6. UI Renderers & Event Handlers
    * ------------------------------------------------------------------------ */
   function getWordBadges(cleanText) {
     const textWithWords = numberToWords(cleanText);
@@ -422,18 +457,6 @@ $(function () {
     }
   }
 
-  function showError(message) {
-    $("#chatArea").prepend(
-      $(
-        '<div class="alert alert-danger alert-dismissible fade show py-2 my-2 me-2 ms-2"></div>',
-      )
-        .text(message)
-        .append(
-          '<button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>',
-        ),
-    );
-  }
-
   function setStoppedState() {
     isRecording = false;
     clearTimeout(restartTimer);
@@ -451,7 +474,7 @@ $(function () {
   }
 
   /* ------------------------------------------------------------------------
-   * 6. User Control Buttons
+   * 7. User Control Buttons
    * ------------------------------------------------------------------------ */
   $("#startBtn").on("click", function () {
     if ($("#resetOnStart").is(":checked")) {
@@ -468,13 +491,14 @@ $(function () {
     try {
       recognition.start();
     } catch (error) {
-      console.warn("Start error, recreating recognition instance:", error);
       createRecognition();
       try {
         recognition.start();
       } catch (err) {
-        showError(
-          "Gagal memulai pengenalan suara. Pastikan mikrofon aktif & diizinkan.",
+        showAlert(
+          "error",
+          "Gagal Memulai Mikrofon",
+          "Gagal memulai pengenalan suara. Pastikan mikrofon aktif dan izin telah diberikan.",
         );
         setStoppedState();
       }
