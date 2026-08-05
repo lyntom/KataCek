@@ -177,14 +177,12 @@ $(function () {
     recognition.onresult = function (event) {
       let interimText = "";
       let maxInterimIndex = -1;
-      let hasFinalInThisEvent = false;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const transcript = result[0].transcript.trim();
 
         if (result.isFinal) {
-          hasFinalInThisEvent = true;
           if (i > lastProcessedIndex) {
             lastProcessedIndex = i;
             if (transcript) {
@@ -201,8 +199,8 @@ $(function () {
       showInterim(currentInterim);
 
       clearTimeout(interimCommitTimer);
-      if (currentInterim && !hasFinalInThisEvent) {
-        // Fast Commit after 350ms of natural speech pause
+      if (currentInterim) {
+        // Fast Commit: convert active interim speech to permanent chat after 350ms of silence
         interimCommitTimer = setTimeout(function () {
           if (currentInterim) {
             if (maxInterimIndex >= 0) {
