@@ -20,7 +20,7 @@
       content="Aplikasi Pengenalan Suara dan Verifikasi ke Kamus Bahasa Indonesia"
     />
 
-    <!-- Early theme sync to prevent FOUC (Flash of Unstyled Content) -->
+    <!-- Early theme sync to prevent FOUC -->
     <script>
       (function () {
         const savedTheme =
@@ -46,8 +46,388 @@
       rel="stylesheet"
     />
 
-    <!-- Custom Application CSS -->
-    <link rel="stylesheet" href="css/style.css" />
+    <style>
+      :root {
+        --app-radius: 24px;
+        --primary-gradient: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        --bg-gradient: linear-gradient(
+          135deg,
+          #eef4ff 0%,
+          #f4f7fc 50%,
+          #eefbf5 100%
+        );
+      }
+
+      body {
+        font-family:
+          "Plus Jakarta Sans",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        min-height: 100vh;
+        background: var(--bg-gradient);
+        color: #2b3674;
+      }
+
+      .app-card {
+        max-width: 980px;
+        border: 0;
+        border-radius: var(--app-radius);
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+      }
+
+      .app-header {
+        color: #fff;
+        background: var(--primary-gradient);
+      }
+
+      .chat-area {
+        height: 480px;
+        overflow-y: auto;
+        padding: 20px;
+        border-radius: 20px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        scroll-behavior: smooth;
+      }
+
+      /* Custom Slim Scrollbar */
+      .chat-area::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chat-area::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .chat-area::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+      }
+      .chat-area::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
+      .chat-row {
+        animation: chatFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      @keyframes chatFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .chat-bubble {
+        max-width: 85%;
+        padding: 14px 18px;
+        background: #ffffff;
+        border-radius: 20px 20px 4px 20px;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        position: relative;
+        transition: all 0.2s ease;
+      }
+
+      .chat-bubble-content {
+        line-height: 2.3;
+      }
+
+      .chat-time {
+        font-size: 0.72rem;
+        color: #94a3b8;
+        font-weight: 500;
+        margin-top: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+      }
+
+      .chat-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0d6efd, #0d99ff);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.25);
+        flex-shrink: 0;
+      }
+
+      .interim-avatar {
+        background: linear-gradient(135deg, #dc3545, #fd7e14);
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.25);
+      }
+
+      .interim-bubble {
+        background: rgba(255, 255, 255, 0.95);
+        border: 1.5px dashed #0d6efd;
+        border-radius: 20px 20px 4px 20px;
+        box-shadow: 0 4px 15px rgba(13, 110, 253, 0.08);
+      }
+
+      .interim-content {
+        color: #475569;
+        font-size: 0.95rem;
+      }
+
+      .word {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin: 3px 2px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 0.92rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border: 1px solid transparent;
+      }
+
+      .word:hover {
+        transform: translateY(-2px) scale(1.03);
+      }
+
+      .word-valid {
+        color: #0f5132;
+        background: #d1e7dd;
+        border-color: #badbcc;
+        box-shadow: 0 2px 6px rgba(25, 135, 84, 0.12);
+      }
+
+      .word-valid:hover {
+        background: #c3e6cb;
+        box-shadow: 0 4px 12px rgba(25, 135, 84, 0.25);
+      }
+
+      .word-invalid {
+        color: #842029;
+        background: #f8d7da;
+        border-color: #f5c2c7;
+        box-shadow: 0 2px 6px rgba(220, 53, 69, 0.1);
+      }
+
+      .word-invalid:hover {
+        background: #f1aeb5;
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
+      }
+
+      .recording-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #dc3545;
+        animation: pulse 1.2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+        }
+      }
+
+      .empty-state {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+        text-align: center;
+      }
+
+      .empty-icon-wrapper {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #e0eafe, #eef4ff);
+        color: #0d6efd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.12);
+      }
+
+      .definition-item {
+        white-space: pre-line;
+        line-height: 1.7;
+      }
+
+      .stat-box {
+        min-width: 110px;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      }
+
+      .app-footer {
+        color: #64748b;
+        font-size: 0.95rem;
+      }
+
+      .heart-pulse {
+        display: inline-block;
+        color: #e63946;
+        animation: heartBeat 1.4s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+        margin: 0 2px;
+      }
+
+      @keyframes heartBeat {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scale(1.25);
+        }
+        40% {
+          transform: scale(1);
+        }
+        60% {
+          transform: scale(1.15);
+        }
+      }
+
+      /* Dark Mode Styles */
+      [data-bs-theme="dark"] {
+        --bg-gradient: linear-gradient(
+          135deg,
+          #0b1329 0%,
+          #111827 50%,
+          #0f172a 100%
+        );
+      }
+
+      [data-bs-theme="dark"] body {
+        background: var(--bg-gradient);
+        color: #f1f5f9;
+      }
+
+      [data-bs-theme="dark"] .app-card {
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      }
+
+      [data-bs-theme="dark"] .app-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+      }
+
+      [data-bs-theme="dark"] .chat-area {
+        background: #0f172a;
+        border-color: #334155;
+      }
+
+      [data-bs-theme="dark"] .chat-area::-webkit-scrollbar-thumb {
+        background: #475569;
+      }
+
+      [data-bs-theme="dark"] .chat-area::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+      }
+
+      [data-bs-theme="dark"] .chat-bubble {
+        background: #1e293b;
+        color: #f8fafc;
+        border-color: #334155;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+      }
+
+      [data-bs-theme="dark"] .chat-time {
+        color: #94a3b8;
+      }
+
+      [data-bs-theme="dark"] .interim-bubble {
+        background: rgba(30, 41, 59, 0.95);
+        border-color: #3b82f6;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.15);
+      }
+
+      [data-bs-theme="dark"] .interim-content {
+        color: #cbd5e1;
+      }
+
+      [data-bs-theme="dark"] .stat-box {
+        background: #1e293b;
+        border-color: #334155 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      }
+
+      [data-bs-theme="dark"] .empty-icon-wrapper {
+        background: linear-gradient(135deg, #1e293b, #334155);
+        color: #3b82f6;
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+      }
+
+      [data-bs-theme="dark"] .word-valid {
+        color: #75b798;
+        background: #051b11;
+        border-color: #0f5132;
+        box-shadow: 0 2px 6px rgba(15, 81, 50, 0.3);
+      }
+
+      [data-bs-theme="dark"] .word-valid:hover {
+        background: #0f5132;
+        color: #d1e7dd;
+      }
+
+      [data-bs-theme="dark"] .word-invalid {
+        color: #ea868f;
+        background: #2c0b0e;
+        border-color: #842029;
+        box-shadow: 0 2px 6px rgba(132, 32, 41, 0.3);
+      }
+
+      [data-bs-theme="dark"] .word-invalid:hover {
+        background: #842029;
+        color: #f8d7da;
+      }
+
+      [data-bs-theme="dark"] .text-dark {
+        color: #f1f5f9 !important;
+      }
+
+      [data-bs-theme="dark"] .text-secondary {
+        color: #cbd5e1 !important;
+      }
+
+      [data-bs-theme="dark"] .form-check-label {
+        color: #cbd5e1;
+      }
+
+      [data-bs-theme="dark"] .modal-content {
+        background-color: #1e293b;
+        color: #f8fafc;
+        border: 1px solid #334155;
+      }
+
+      [data-bs-theme="dark"] .modal-header {
+        border-bottom-color: #334155;
+      }
+
+      [data-bs-theme="dark"] .app-footer {
+        color: #94a3b8;
+      }
+    </style>
   </head>
   <body>
     <main class="container py-4 py-lg-5">
@@ -185,7 +565,6 @@
       </footer>
     </main>
 
-    <!-- Definition Detail Modal -->
     <div
       class="modal fade"
       id="definitionModal"
@@ -220,7 +599,475 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <!-- Custom Application Script -->
-    <script src="js/app.js"></script>
+    <script>
+      $(function () {
+        /* ------------------------------------------------------------------------
+         * 1. SweetAlert2 Helper & Theme Sync
+         * ------------------------------------------------------------------------ */
+        function getSwalTheme() {
+          const isDark =
+            document.documentElement.getAttribute("data-bs-theme") === "dark";
+          return {
+            background: isDark ? "#1e293b" : "#ffffff",
+            color: isDark ? "#f1f5f9" : "#1e293b",
+            confirmButtonColor: "#0d6efd",
+          };
+        }
+
+        function showAlert(icon, title, text) {
+          const theme = getSwalTheme();
+          if (typeof Swal !== "undefined") {
+            Swal.fire({
+              icon: icon,
+              title: title,
+              text: text,
+              background: theme.background,
+              color: theme.color,
+              confirmButtonColor: theme.confirmButtonColor,
+              customClass: {
+                popup: "rounded-4 shadow",
+              },
+            });
+          } else {
+            alert(`${title}: ${text}`);
+          }
+        }
+
+        /* ------------------------------------------------------------------------
+         * 2. Theme Switcher Logic (Light & Dark Mode)
+         * ------------------------------------------------------------------------ */
+        function updateThemeUI(theme) {
+          document.documentElement.setAttribute("data-bs-theme", theme);
+          localStorage.setItem("katacek_theme", theme);
+
+          const $icon = $("#themeToggleIcon");
+          const $text = $("#themeToggleText");
+          const $metaTheme = $('meta[name="theme-color"]');
+
+          if (theme === "dark") {
+            $icon.attr("class", "fa-solid fa-sun text-warning");
+            $text.text("Mode Terang");
+            $metaTheme.attr("content", "#0b1329");
+          } else {
+            $icon.attr("class", "fa-solid fa-moon");
+            $text.text("Mode Gelap");
+            $metaTheme.attr("content", "#0d6efd");
+          }
+        }
+
+        const initialTheme =
+          document.documentElement.getAttribute("data-bs-theme") || "light";
+        updateThemeUI(initialTheme);
+
+        $("#themeToggleBtn").on("click", function () {
+          const currentTheme =
+            document.documentElement.getAttribute("data-bs-theme");
+          const nextTheme = currentTheme === "dark" ? "light" : "dark";
+          updateThemeUI(nextTheme);
+        });
+
+        /* ------------------------------------------------------------------------
+         * 3. Original Stable Speech Recognition Engine
+         * ------------------------------------------------------------------------ */
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        const definitionModal = new bootstrap.Modal(
+          document.getElementById("definitionModal"),
+        );
+        let recognition = null;
+        let dictionary = {};
+        let isRecording = false;
+        let manualStop = false;
+        let lastProcessedIndex = -1;
+        let lastFinalText = "";
+        let lastFinalTime = 0;
+
+        $.getJSON("dictionary.json")
+          .done(function (data) {
+            dictionary = data.kata || {};
+
+            $("#dictionaryCount").text(
+              Object.keys(dictionary).length.toLocaleString("id-ID"),
+            );
+
+            $("#loadingAlert")
+              .removeClass("alert-info")
+              .addClass("alert-success")
+              .html(
+                '<i class="fa-solid fa-circle-check me-2"></i>' +
+                  "Database kamus berhasil dimuat.",
+              );
+
+            $("#startBtn").prop("disabled", !SpeechRecognition);
+
+            setTimeout(function () {
+              $("#loadingAlert").slideUp();
+            }, 1500);
+          })
+          .fail(function () {
+            const errorMsg =
+              "dictionary.json gagal dimuat. Jalankan aplikasi melalui web server lokal.";
+            $("#loadingAlert")
+              .removeClass("alert-info")
+              .addClass("alert-danger")
+              .html(
+                '<i class="fa-solid fa-triangle-exclamation me-2"></i>' +
+                  errorMsg,
+              );
+            $("#startBtn").prop("disabled", !SpeechRecognition);
+            showAlert("error", "Gagal Memuat Kamus", errorMsg);
+          });
+
+        if (!SpeechRecognition) {
+          $("#browserWarning").removeClass("d-none");
+          showAlert(
+            "warning",
+            "Browser Tidak Didukung",
+            "Browser Anda belum mendukung fitur SpeechRecognition. Gunakan Google Chrome atau Microsoft Edge versi terbaru.",
+          );
+        }
+
+        function numberToWords(str) {
+          const ones = [
+            "",
+            "satu",
+            "dua",
+            "tiga",
+            "empat",
+            "lima",
+            "enam",
+            "tujuh",
+            "delapan",
+            "sembilan",
+            "sepuluh",
+            "sebelas",
+          ];
+
+          function convertNum(n) {
+            n = parseInt(n, 10);
+            if (isNaN(n)) return "";
+            if (n === 0) return "nol";
+            if (n < 12) return ones[n];
+            if (n < 20) return convertNum(n - 10) + " belas";
+            if (n < 100)
+              return (
+                convertNum(Math.floor(n / 10)) + " puluh " + convertNum(n % 10)
+              );
+            if (n < 200) return "seratus " + convertNum(n - 100);
+            if (n < 1000)
+              return (
+                convertNum(Math.floor(n / 100)) +
+                " ratus " +
+                convertNum(n % 100)
+              );
+            if (n < 2000) return "seribu " + convertNum(n - 1000);
+            if (n < 1000000)
+              return (
+                convertNum(Math.floor(n / 1000)) +
+                " ribu " +
+                convertNum(n % 1000)
+              );
+            return n.toString();
+          }
+
+          return String(str || "").replace(/\b\d+\b/g, function (match) {
+            return convertNum(match);
+          });
+        }
+
+        function normalizeWord(value) {
+          return String(value || "")
+            .toLocaleLowerCase("id-ID")
+            .replace(/[^a-zà-ÿ0-9'-]/gi, "")
+            .replace(/^[-']+|[-']+$/g, "");
+        }
+
+        function createRecognition() {
+          recognition = new SpeechRecognition();
+          recognition.lang = "id-ID";
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+
+          recognition.onstart = function () {
+            isRecording = true;
+            lastProcessedIndex = -1;
+
+            $("#statusBadge")
+              .removeClass("text-bg-secondary")
+              .addClass("text-bg-danger")
+              .html('<span class="recording-dot me-2"></span>Sedang merekam');
+
+            $("#startBtn").prop("disabled", true);
+            $("#stopBtn").prop("disabled", false);
+          };
+
+          recognition.onresult = function (event) {
+            let interimText = "";
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcript = result[0].transcript.trim();
+
+              if (result.isFinal) {
+                if (i > lastProcessedIndex) {
+                  lastProcessedIndex = i;
+                  if (transcript) {
+                    addMessage(transcript);
+                  }
+                }
+              } else {
+                interimText += transcript + " ";
+              }
+            }
+
+            showInterim(interimText.trim());
+          };
+
+          recognition.onerror = function (event) {
+            console.warn("SpeechRecognition error:", event.error);
+            const messages = {
+              "not-allowed":
+                "Izin mikrofon ditolak. Periksa izin mikrofon pada browser Anda.",
+              "audio-capture": "Mikrofon tidak ditemukan.",
+              network:
+                "Terjadi gangguan jaringan pada layanan pengenalan suara.",
+              "no-speech": "Tidak ada suara yang terdeteksi.",
+              aborted: "Perekaman dihentikan.",
+            };
+
+            if (!["aborted", "no-speech"].includes(event.error)) {
+              showAlert(
+                "error",
+                "Kesalahan Pengenalan Suara",
+                messages[event.error] || "Kesalahan mikrofon: " + event.error,
+              );
+            }
+          };
+
+          recognition.onend = function () {
+            if (isRecording && !manualStop) {
+              try {
+                recognition.start();
+              } catch (error) {
+                console.debug(error);
+              }
+              return;
+            }
+
+            setStoppedState();
+          };
+        }
+
+        function addMessage(text) {
+          const now = Date.now();
+          const cleanText = text.trim();
+
+          if (!cleanText) return;
+
+          if (cleanText === lastFinalText && now - lastFinalTime < 2000) {
+            return;
+          }
+
+          lastFinalText = cleanText;
+          lastFinalTime = now;
+
+          $("#emptyState, #interimRow").remove();
+
+          const textWithWords = numberToWords(cleanText);
+
+          const words = textWithWords
+            .split(/\s+/)
+            .map(normalizeWord)
+            .filter(Boolean);
+
+          if (!words.length) return;
+
+          const timeString = new Date().toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          const $row = $(
+            '<div class="chat-row mb-3 d-flex align-items-end justify-content-end gap-2"></div>',
+          );
+          const $bubble = $('<div class="chat-bubble"></div>');
+          const $content = $('<div class="chat-bubble-content"></div>');
+
+          words.forEach(function (word) {
+            const definitions = dictionary[word];
+            const isValid =
+              Array.isArray(definitions) && definitions.length > 0;
+
+            const $word = $("<button>", {
+              type: "button",
+              class: "word " + (isValid ? "word-valid" : "word-invalid"),
+              text: word,
+              title: isValid
+                ? "Klik untuk melihat penjelasan"
+                : "Kata tidak ditemukan",
+            })
+              .data("word", word)
+              .data("definitions", definitions || []);
+
+            $content.append($word).append(" ");
+          });
+
+          const $time = $(
+            `<div class="chat-time"><i class="fa-regular fa-clock"></i> ${timeString}</div>`,
+          );
+
+          $bubble.append($content).append($time);
+
+          const $avatar = $(
+            '<div class="chat-avatar" title="Suara Pengguna"><i class="fa-solid fa-user"></i></div>',
+          );
+
+          $row.append($bubble).append($avatar);
+
+          $("#chatArea").append($row);
+          updateStats();
+          scrollBottom();
+        }
+
+        $(document).on("click", ".word", function () {
+          const word = $(this).data("word");
+          const definitions = $(this).data("definitions") || [];
+
+          $("#modalWord").text(word);
+
+          const $container = $("#modalDefinitions").empty();
+
+          if (!definitions.length) {
+            $container.html(
+              '<div class="alert alert-danger mb-0">' +
+                "Kata tidak ditemukan dalam database." +
+                "</div>",
+            );
+          } else {
+            definitions.forEach(function (definition, index) {
+              const $item = $(
+                '<div class="definition-item border rounded-3 p-3 mb-2"></div>',
+              );
+
+              $item
+                .append($("<strong>").text(index + 1 + ". "))
+                .append(document.createTextNode(definition));
+
+              $container.append($item);
+            });
+          }
+
+          definitionModal.show();
+        });
+
+        function showInterim(text) {
+          $("#interimRow").remove();
+
+          if (!text) return;
+
+          $("#emptyState").remove();
+
+          const $interimRow = $(`
+            <div id="interimRow" class="chat-row mb-3 d-flex align-items-end justify-content-end gap-2">
+              <div class="chat-bubble interim-bubble">
+                <div class="interim-content d-flex align-items-center gap-2">
+                  <span class="spinner-grow spinner-grow-sm text-primary" role="status"></span>
+                  <span>${text}…</span>
+                </div>
+              </div>
+              <div class="chat-avatar interim-avatar" title="Merekam Suara..."><i class="fa-solid fa-microphone-lines"></i></div>
+            </div>
+          `);
+
+          $("#chatArea").append($interimRow);
+          scrollBottom();
+        }
+
+        function clearChat() {
+          lastFinalText = "";
+          lastFinalTime = 0;
+          lastProcessedIndex = -1;
+
+          $("#chatArea").html(`
+            <div id="emptyState" class="empty-state">
+              <div class="empty-icon-wrapper">
+                <i class="fa-solid fa-comments fa-2x"></i>
+              </div>
+              <h6 class="fw-bold mb-1">Siap Mendengarkan</h6>
+              <p class="small text-dark mb-0">Tekan <strong>Mulai Merekam</strong>, lalu mulailah berbicara.</p>
+            </div>
+          `);
+
+          updateStats();
+        }
+
+        function updateStats() {
+          $("#validCount").text($(".word-valid").length);
+          $("#invalidCount").text($(".word-invalid").length);
+        }
+
+        function scrollBottom() {
+          const area = $("#chatArea")[0];
+          if (area) {
+            area.scrollTop = area.scrollHeight;
+          }
+        }
+
+        function setStoppedState() {
+          isRecording = false;
+
+          $("#statusBadge")
+            .removeClass("text-bg-danger")
+            .addClass("text-bg-secondary")
+            .html(
+              '<i class="fa-solid fa-circle-stop me-1"></i> Perekaman berhenti',
+            );
+
+          $("#startBtn").prop("disabled", false);
+          $("#stopBtn").prop("disabled", true);
+
+          showInterim("");
+        }
+
+        $("#startBtn").on("click", function () {
+          if ($("#resetOnStart").is(":checked")) {
+            clearChat();
+          }
+
+          manualStop = false;
+
+          if (!recognition) {
+            createRecognition();
+          }
+
+          try {
+            recognition.start();
+          } catch (error) {
+            console.debug(error);
+          }
+        });
+
+        $("#stopBtn").on("click", function () {
+          manualStop = true;
+          isRecording = false;
+
+          if (recognition) {
+            try {
+              recognition.stop();
+            } catch (e) {}
+          }
+
+          setStoppedState();
+        });
+
+        $("#clearBtn").on("click", clearChat);
+
+        if (SpeechRecognition) {
+          createRecognition();
+        }
+      });
+    </script>
   </body>
 </html>
