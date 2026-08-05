@@ -53,6 +53,9 @@ $(function () {
   let manualStop = false;
   let lastProcessedIndex = -1;
   let restartTimer = null;
+  let interimCommitTimer = null;
+  let lastCommittedText = "";
+  let lastCommittedTime = 0;
 
   // Load Dictionary JSON Database
   $.getJSON("dictionary.json")
@@ -175,16 +178,18 @@ $(function () {
 
     recognition.onresult = function (event) {
       let interimText = "";
+      let hasFinalInThisEvent = false;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const transcript = result[0].transcript.trim();
 
         if (result.isFinal) {
+          hasFinalInThisEvent = true;
           if (i > lastProcessedIndex) {
             lastProcessedIndex = i;
             if (transcript) {
-              addMessage(transcript);
+              commitMessage(transcript);
             }
           }
         } else {
@@ -192,7 +197,19 @@ $(function () {
         }
       }
 
-      showInterim(interimText.trim());
+      const currentInterim = interimText.trim();
+      showInterim(currentInterim);
+
+      clearTimeout(interimCommitTimer);
+      if (currentInterim && !hasFinalInThisEvent) {
+        // Fast Commit: convert interim speech to chat after 600ms of silence
+        interimCommitTimer = setTimeout(function () {
+          if (currentInterim) {
+            commitMessage(currentInterim);
+            showInterim("");
+          }
+        }, 600);
+      }
     };
 
     recognition.onerror = function (event) {
@@ -214,6 +231,8 @@ $(function () {
     };
 
     recognition.onend = function () {
+      clearTimeout(interimCommitTimer);
+
       if (isRecording && !manualStop) {
         lastProcessedIndex = -1;
         clearTimeout(restartTimer);
@@ -231,7 +250,7 @@ $(function () {
               }
             }
           }
-        }, 150);
+        }, 60);
         return;
       }
 
@@ -242,6 +261,27 @@ $(function () {
   /* ------------------------------------------------------------------------
    * 5. UI Renderers & Event Handlers
    * ------------------------------------------------------------------------ */
+  function commitMessage(text) {
+    const cleanText = String(text || "").trim();
+    if (!cleanText) return;
+
+    const normalizedText = cleanText.toLowerCase();
+    const now = Date.now();
+
+    // Prevent duplicate commits of identical text within 2.5 seconds
+    if (
+      normalizedText === lastCommittedText &&
+      now - lastCommittedTime < 2500
+    ) {
+      return;
+    }
+
+    lastCommittedText = normalizedText;
+    lastCommittedTime = now;
+
+    addMessage(cleanText);
+  }
+
   function addMessage(text) {
     const cleanText = String(text || "").trim();
 
@@ -365,6 +405,7 @@ $(function () {
 
   function clearChat() {
     lastProcessedIndex = -1;
+    clearTimeout(interimCommitTimer);
 
     $("#chatArea").html(`
       <div id="emptyState" class="empty-state">
@@ -406,6 +447,7 @@ $(function () {
   function setStoppedState() {
     isRecording = false;
     clearTimeout(restartTimer);
+    clearTimeout(interimCommitTimer);
 
     $("#statusBadge")
       .removeClass("text-bg-danger")
@@ -453,6 +495,7 @@ $(function () {
     manualStop = true;
     isRecording = false;
     clearTimeout(restartTimer);
+    clearTimeout(interimCommitTimer);
 
     if (recognition) {
       try {
