@@ -244,6 +244,40 @@
         }
       }
 
+      .visualizer-container {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        height: 24px;
+        padding: 4px 10px;
+        background: rgba(13, 110, 253, 0.1);
+        border: 1px solid rgba(13, 110, 253, 0.2);
+        border-radius: 12px;
+        transition: all 0.2s ease;
+      }
+
+      .visualizer-bar {
+        width: 3px;
+        height: 20%;
+        background: #0d6efd;
+        border-radius: 3px;
+        transition: height 0.06s ease;
+      }
+
+      #statusBadge.is-speaking {
+        box-shadow: 0 0 12px rgba(220, 53, 69, 0.6);
+        animation: speakingGlow 0.8s infinite alternate;
+      }
+
+      @keyframes speakingGlow {
+        from {
+          box-shadow: 0 0 4px rgba(220, 53, 69, 0.4);
+        }
+        to {
+          box-shadow: 0 0 16px rgba(220, 53, 69, 0.8);
+        }
+      }
+
       .empty-state {
         height: 100%;
         display: flex;
@@ -366,6 +400,15 @@
         color: #cbd5e1;
       }
 
+      [data-bs-theme="dark"] .visualizer-container {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: rgba(59, 130, 246, 0.3);
+      }
+
+      [data-bs-theme="dark"] .visualizer-bar {
+        background: #3b82f6;
+      }
+
       [data-bs-theme="dark"] .stat-box {
         background: #1e293b;
         border-color: #334155 !important;
@@ -479,11 +522,24 @@
           <div
             class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"
           >
-            <div
-              id="statusBadge"
-              class="badge rounded-pill text-bg-secondary px-3 py-2"
-            >
-              <i class="fa-solid fa-circle-stop me-1"></i> Belum merekam
+            <div class="d-flex align-items-center gap-2">
+              <div
+                id="statusBadge"
+                class="badge rounded-pill text-bg-secondary px-3 py-2 d-inline-flex align-items-center gap-2"
+              >
+                <i class="fa-solid fa-circle-stop"></i> <span>Belum merekam</span>
+              </div>
+              <div
+                id="visualizerContainer"
+                class="visualizer-container d-none"
+                title="Level Suara Mikrofon"
+              >
+                <span class="visualizer-bar"></span>
+                <span class="visualizer-bar"></span>
+                <span class="visualizer-bar"></span>
+                <span class="visualizer-bar"></span>
+                <span class="visualizer-bar"></span>
+              </div>
             </div>
 
             <div class="d-flex flex-wrap gap-2">
@@ -667,7 +723,102 @@
         });
 
         /* ------------------------------------------------------------------------
-         * 3. Robust High-Performance Speech Recognition Engine
+         * 3. Web Audio API & Microphone Level Visualizer
+         * ------------------------------------------------------------------------ */
+        let audioContext = null;
+        let analyserNode = null;
+        let micStream = null;
+        let animFrameId = null;
+
+        async function startAudioStream() {
+          try {
+            micStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                channelCount: 1,
+                sampleRate: 48000,
+              },
+            });
+
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              audioContext = new AudioCtx();
+              const source = audioContext.createMediaStreamSource(micStream);
+              analyserNode = audioContext.createAnalyser();
+              analyserNode.fftSize = 64;
+              analyserNode.smoothingTimeConstant = 0.4;
+              source.connect(analyserNode);
+
+              $("#visualizerContainer").removeClass("d-none");
+              updateAudioVisualizer();
+            }
+          } catch (err) {
+            console.warn("Web Audio API Visualizer warning:", err);
+          }
+        }
+
+        function stopAudioStream() {
+          if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+          }
+          if (micStream) {
+            micStream.getTracks().forEach((track) => track.stop());
+            micStream = null;
+          }
+          if (audioContext && audioContext.state !== "closed") {
+            try {
+              audioContext.close();
+            } catch (e) {}
+            audioContext = null;
+          }
+          $("#visualizerContainer").addClass("d-none");
+          resetVisualizer();
+        }
+
+        function updateAudioVisualizer() {
+          if (!analyserNode || !isRecording) {
+            resetVisualizer();
+            return;
+          }
+
+          const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+          analyserNode.getByteFrequencyData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+
+          const $bars = $(".visualizer-bar");
+          $bars.each(function (idx) {
+            const val = dataArray[idx % dataArray.length] || 0;
+            const heightPercent = Math.max(
+              15,
+              Math.min(100, (val / 255) * 100 * 1.5),
+            );
+            $(this).css("height", heightPercent + "%");
+          });
+
+          if (average > 18) {
+            $("#statusBadge").addClass("is-speaking");
+          } else {
+            $("#statusBadge").removeClass("is-speaking");
+          }
+
+          animFrameId = requestAnimationFrame(updateAudioVisualizer);
+        }
+
+        function resetVisualizer() {
+          $(".visualizer-bar").css("height", "20%");
+          $("#statusBadge").removeClass("is-speaking");
+        }
+
+        /* ------------------------------------------------------------------------
+         * 4. Robust High-Performance Speech Recognition & Anti-Duplication Engine
          * ------------------------------------------------------------------------ */
         const SpeechRecognition =
           window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -682,6 +833,9 @@
         let lastProcessedIndex = -1;
         let restartTimer = null;
         let interimCommitTimer = null;
+
+        // Deduplication & extension memory buffer
+        let recentCommits = []; // items: { text, normText, time, isInterim, $row, $bubble, $content }
 
         $.getJSON("dictionary.json")
           .done(function (data) {
@@ -803,7 +957,9 @@
             $("#statusBadge")
               .removeClass("text-bg-secondary")
               .addClass("text-bg-danger")
-              .html('<span class="recording-dot me-2"></span>Sedang merekam');
+              .html(
+                '<span class="recording-dot me-1"></span><span>Sedang merekam</span>',
+              );
 
             $("#startBtn").prop("disabled", true);
             $("#stopBtn").prop("disabled", false);
@@ -821,7 +977,7 @@
                 if (i > lastProcessedIndex) {
                   lastProcessedIndex = i;
                   if (transcript) {
-                    addMessage(transcript);
+                    commitTranscript(transcript, false);
                   }
                 }
               } else {
@@ -835,16 +991,16 @@
 
             clearTimeout(interimCommitTimer);
             if (currentInterim) {
-              // Ultra-fast 450ms commit on speech pause
+              // Ultra-fast 400ms commit on speech pause with anti-duplication safety
               interimCommitTimer = setTimeout(function () {
                 if (currentInterim && isRecording) {
                   if (maxIndex >= 0 && maxIndex > lastProcessedIndex) {
                     lastProcessedIndex = maxIndex;
-                    addMessage(currentInterim);
+                    commitTranscript(currentInterim, true);
                     showInterim("");
                   }
                 }
-              }, 450);
+              }, 400);
             }
           };
 
@@ -885,7 +1041,7 @@
                     setStoppedState();
                   }
                 }
-              }, 80);
+              }, 50);
               return;
             }
 
@@ -893,11 +1049,73 @@
           };
         }
 
-        function addMessage(text) {
+        function commitTranscript(text, isInterimAutoCommit = false) {
           const cleanText = String(text || "").trim();
-
           if (!cleanText) return;
 
+          const normText = cleanText.toLowerCase().replace(/\s+/g, " ").trim();
+          const now = Date.now();
+
+          // Keep recent commits within 4 seconds window
+          recentCommits = recentCommits.filter((c) => now - c.time < 4000);
+
+          let matchedCommit = null;
+          let matchType = "none";
+
+          for (let i = recentCommits.length - 1; i >= 0; i--) {
+            const c = recentCommits[i];
+            if (c.normText === normText) {
+              matchedCommit = c;
+              matchType = "exact";
+              break;
+            }
+            if (now - c.time < 2500) {
+              if (
+                normText.startsWith(c.normText) ||
+                c.normText.startsWith(normText)
+              ) {
+                matchedCommit = c;
+                matchType = "extension";
+                break;
+              }
+            }
+          }
+
+          if (matchedCommit) {
+            if (matchType === "exact") {
+              // Exact duplicate detected -> do not create a 2nd bubble!
+              if (!isInterimAutoCommit && matchedCommit.isInterim) {
+                matchedCommit.isInterim = false;
+              }
+              return;
+            } else if (matchType === "extension") {
+              if (
+                matchedCommit.isInterim ||
+                normText.length > matchedCommit.normText.length
+              ) {
+                updateMessage(
+                  matchedCommit,
+                  cleanText,
+                  normText,
+                  isInterimAutoCommit,
+                );
+                return;
+              }
+              return;
+            }
+          }
+
+          const newCommit = renderNewMessage(
+            cleanText,
+            normText,
+            isInterimAutoCommit,
+          );
+          if (newCommit) {
+            recentCommits.push(newCommit);
+          }
+        }
+
+        function renderNewMessage(cleanText, normText, isInterimAutoCommit) {
           $("#emptyState, #interimRow").remove();
 
           const textWithWords = numberToWords(cleanText);
@@ -911,7 +1129,7 @@
             words = cleanText.split(/\s+/).filter(Boolean);
           }
 
-          if (!words.length) return;
+          if (!words.length) return null;
 
           const timeString = new Date().toLocaleTimeString("id-ID", {
             hour: "2-digit",
@@ -956,6 +1174,64 @@
           $row.append($bubble).append($avatar);
 
           $("#chatArea").append($row);
+          updateStats();
+          scrollBottom();
+
+          return {
+            text: cleanText,
+            normText: normText,
+            time: Date.now(),
+            isInterim: isInterimAutoCommit,
+            $row: $row,
+            $bubble: $bubble,
+            $content: $content,
+          };
+        }
+
+        function updateMessage(
+          commitObj,
+          cleanText,
+          normText,
+          isInterimAutoCommit,
+        ) {
+          const textWithWords = numberToWords(cleanText);
+
+          let words = textWithWords
+            .split(/\s+/)
+            .map(normalizeWord)
+            .filter(Boolean);
+
+          if (!words.length) {
+            words = cleanText.split(/\s+/).filter(Boolean);
+          }
+
+          if (!words.length) return;
+
+          commitObj.$content.empty();
+          words.forEach(function (word) {
+            const definitions = dictionary[word];
+            const isValid =
+              Array.isArray(definitions) && definitions.length > 0;
+
+            const $word = $("<button>", {
+              type: "button",
+              class: "word " + (isValid ? "word-valid" : "word-invalid"),
+              text: word,
+              title: isValid
+                ? "Klik untuk melihat penjelasan"
+                : "Kata tidak ditemukan",
+            })
+              .data("word", word)
+              .data("definitions", definitions || []);
+
+            commitObj.$content.append($word).append(" ");
+          });
+
+          commitObj.text = cleanText;
+          commitObj.normText = normText;
+          commitObj.time = Date.now();
+          commitObj.isInterim = isInterimAutoCommit;
+
           updateStats();
           scrollBottom();
         }
@@ -1016,6 +1292,7 @@
 
         function clearChat() {
           lastProcessedIndex = -1;
+          recentCommits = [];
           clearTimeout(interimCommitTimer);
 
           $("#chatArea").html(`
@@ -1047,12 +1324,13 @@
           isRecording = false;
           clearTimeout(restartTimer);
           clearTimeout(interimCommitTimer);
+          stopAudioStream();
 
           $("#statusBadge")
             .removeClass("text-bg-danger")
             .addClass("text-bg-secondary")
             .html(
-              '<i class="fa-solid fa-circle-stop me-1"></i> Perekaman berhenti',
+              '<i class="fa-solid fa-circle-stop me-1"></i> <span>Perekaman berhenti</span>',
             );
 
           $("#startBtn").prop("disabled", false);
@@ -1072,6 +1350,7 @@
           try {
             createRecognition();
             recognition.start();
+            startAudioStream();
           } catch (error) {
             showAlert(
               "error",
